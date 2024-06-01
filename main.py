@@ -42,22 +42,10 @@ def merge_bnb(current: pd.DataFrame, bnb: pd.DataFrame) -> pd.DataFrame:
         # Check for missing codes in bnb and try to match based on other columns
         missing_codes_bnb = set(bnb['Code']) - set(current['Code'])
 
-        for code in missing_codes_bnb:
-            listing_match = current[current['ListingBNB'] == bnb[bnb['Code'] == code]['Listing'].values[0]]
-            if not listing_match.empty:
-                merged_df_bnb.loc[merged_df_bnb['Code'].isnull() & (
-                        merged_df_bnb['Listing'] == bnb[bnb['Code'] == code]['Listing'].values[0]), 'Code'] = code
-            else:
-                customer_match = current[current['QBO'] == bnb[bnb['Code'] == code]['Customer'].values[0]]
-                if not customer_match.empty:
-                    merged_df_bnb.loc[merged_df_bnb['Code'].isnull() & (
-                            merged_df_bnb['QBO'] == bnb[bnb['Code'] == code]['Customer'].values[0]), 'Code'] = code
-
         # Check for any remaining missing codes
-        remaining_missing_codes_bnb = set(bnb['Code']) - set(merged_df_bnb['Code'])
-        if remaining_missing_codes_bnb:
+        if missing_codes_bnb:
             debug("Warning: The following codes from BNB are not found in Current:")
-            debug(remaining_missing_codes_bnb)
+            debug(missing_codes_bnb)
 
         return merged_df_bnb
     except Exception as e:
@@ -83,24 +71,9 @@ def merge_vrbo(current: pd.DataFrame, vrbo: pd.DataFrame) -> pd.DataFrame:
         # Check for missing codes in vrbo and try to match based on other columns
         missing_codes_vrbo = set(vrbo['Code']) - set(current['Code'])
 
-        for code in missing_codes_vrbo:
-            listing_match = current[current['VRBO_ID'] == vrbo[vrbo['Code'] == code]['Property ID'].values[
-                0]] if 'VRBO_ID' in current.columns else pd.DataFrame()
-            if not listing_match.empty:
-                merged_df_vrbo.loc[merged_df_vrbo['Code'].isnull() & (
-                        merged_df_vrbo['VRBO_ID'] == vrbo[vrbo['Code'] == code]['Property ID'].values[
-                    0]), 'Code'] = code
-            else:
-                customer_match = current[current['QBO'] == vrbo[vrbo['Code'] == code]['Customer'].values[0]]
-                if not customer_match.empty:
-                    merged_df_vrbo.loc[merged_df_vrbo['Code'].isnull() & (
-                            merged_df_vrbo['QBO'] == vrbo[vrbo['Code'] == code]['Customer'].values[0]), 'Code'] = code
-
-        # Check for any remaining missing codes
-        remaining_missing_codes_vrbo = set(vrbo['Code']) - set(merged_df_vrbo['Code'])
-        if remaining_missing_codes_vrbo:
+        if missing_codes_vrbo:
             debug("Warning: The following codes from VRBO are not found in Current:")
-            debug(remaining_missing_codes_vrbo)
+            debug(missing_codes_vrbo)
 
         return merged_df_vrbo
     except Exception as e:
@@ -110,17 +83,17 @@ def merge_vrbo(current: pd.DataFrame, vrbo: pd.DataFrame) -> pd.DataFrame:
 
 def calculate_taxes(merged_df_bnb: pd.DataFrame, merged_df_vrbo: pd.DataFrame) -> pd.DataFrame:
     try:
-        # Create a list of all listings found in both bnb and vrbo
-        listings = list(set(merged_df_bnb['Listing']).union(set(merged_df_vrbo['ListingBNB'])))
+        # Create a list of all codes found in both bnb and vrbo
+        codes = list(set(merged_df_bnb['Code']).union(set(merged_df_vrbo['Code'])))
 
         # Create the taxes dataframe
         taxes_df = pd.DataFrame(
             columns=['Code', 'Listing', 'VRBO_ID', 'QBO', 'Tax_Location', 'Number_of_Cleanings', 'Total_Cleaning',
                      'Total_Income', 'Total_Taxes'])
 
-        for listing in listings:
-            bnb_data = merged_df_bnb[merged_df_bnb['Listing'] == listing].copy()
-            vrbo_data = merged_df_vrbo[merged_df_vrbo['ListingBNB'] == listing].copy()
+        for code in codes:
+            bnb_data = merged_df_bnb[merged_df_bnb['Code'] == code].copy()
+            vrbo_data = merged_df_vrbo[merged_df_vrbo['Code'] == code].copy()
 
             # Convert 'Cleaning' column to numeric type
             bnb_data.loc[:, 'Cleaning'] = pd.to_numeric(bnb_data['Cleaning'], errors='coerce')
@@ -131,18 +104,18 @@ def calculate_taxes(merged_df_bnb: pd.DataFrame, merged_df_vrbo: pd.DataFrame) -
             total_income = bnb_data['Amount'].sum() + vrbo_data['Payout'].sum()
             total_taxes = 0.00558 * (total_income - total_cleaning)
 
-            code = ''
+            listing = ''
             vrbo_id = ''
             qbo = ''
             tax_location = ''
 
             if not bnb_data.empty:
-                code = bnb_data['Code'].iloc[0]
+                listing = bnb_data['Listing'].iloc[0]
                 vrbo_id = bnb_data['VRBO_ID'].iloc[0] if 'VRBO_ID' in bnb_data.columns else ''
                 qbo = bnb_data['QBO'].iloc[0]
                 tax_location = bnb_data['Tax_Location'].iloc[0]
             elif not vrbo_data.empty:
-                code = vrbo_data['Code'].iloc[0]
+                listing = vrbo_data['ListingBNB'].iloc[0]
                 vrbo_id = vrbo_data['VRBO_ID'].iloc[0] if 'VRBO_ID' in vrbo_data.columns else ''
                 qbo = vrbo_data['QBO'].iloc[0]
                 tax_location = vrbo_data['Tax_Location'].iloc[0]
